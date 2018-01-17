@@ -1,23 +1,25 @@
 ########################################################################################################################
-#    File: Sqlite3.py
-# Purpose: Class to make working with SQLite3 a lot easier.
+#    File: Maria.py
+# Purpose: Class to make working with MariaDB/MySQL a lot easier.
 #  Author: Dan Huckson, https://github.com/unodan
 ########################################################################################################################
-import gzip
-import sqlite3
+import os
+import time
+import pypyodbc
 import logging as lg
-from os import remove
-from os.path import isfile, getsize
-from time import gmtime, strftime
 from dbslave.interface import *
+
+
 
 
 class Interface(Instance):
     def __init__(self, credentials, log_name=None):
-
+        self.host = None
         self.conn = None
         self.cursor = None
         self.dbName = None
+        self.dbUser = None
+        self.dbPassword = None
         self.credentials = credentials
         self.class_name = self.__class__.__name__
 
@@ -25,46 +27,30 @@ class Interface(Instance):
             log_name = self.class_name + '.log'
 
         lg.basicConfig(filename=log_name, format='%(levelname)s:%(name)s:%(asctime)s:%(message)s',
-            datefmt='%Y/%m/%d %H:%M:%S', level=lg.DEBUG)
-        lg.info('__init__:SQLite3 Object created')
+            datefmt='%Y/%m/%d %I:%M:%S', level=lg.DEBUG)
+        lg.info(self.class_name + ':__init__:Object created')
 
     def use(self, database_name):
         cred = self.credentials
-
-        if database_name:
-            self.dbName = database_name
-        else:
-            self.dbName = cred['database']
+        sql = 'USE ' + database_name
 
         try:
-            self.conn = sqlite3.connect(self.dbName, isolation_level=None)
-            self.cursor = self.conn.cursor()
-            lg.info(self.class_name + ':use:Using database:' + database_name)
+            self.cursor.execute(sql)
+            lg.info(self.class_name + ':use:Using database:' + database_name + ':' + sql)
             return True
 
         except Exception as err:
-            lg.error('use:' + str(err))
+            lg.error('use:' + str(err) + ':' + sql)
             return False
 
     def dump(self, database_name):
         try:
-            date_stamp = strftime("_%Y-%m-%d_%H:%M:%S", gmtime())
-            with open(database_name + date_stamp + '.sql', 'w') as f:
-                for i in self.conn.iterdump():
-                    f.write("%s\n" % i)
-            f.close()
-
-            with open(database_name + date_stamp + '.sql', 'rb') as f_in, \
-                    gzip.open(database_name + date_stamp + '.gz', 'wb') as f_out:
-                f_out.writelines(f_in)
-            f_out.close()
-
-            remove(database_name + date_stamp + '.sql')
-
+            t = time.strftime('%Y-%m-%d_%H:%M:%S')
+            print("Todo:", t)
             return True
 
         except Exception as err:
-            lg.error(self.class_name + ':dump:' + str(err))
+            lg.error('dump:' + str(err))
             return False
 
     def close(self):
@@ -87,7 +73,7 @@ class Interface(Instance):
             return True
 
         except Exception as err:
-            lg.error(self.class_name + ':commit:' + str(err))
+            lg.error('commit:' + str(err))
             return False
 
     def connect(self, database_name=None):
@@ -98,12 +84,22 @@ class Interface(Instance):
         else:
             self.dbName = cred['database']
 
-        if self.database_exist(self.dbName):
-            self.conn = sqlite3.connect(self.dbName)
-            self.cursor = self.conn.cursor()
+        try:
+            self.conn = pypyodbc.connect('DRIVER={ODBC Driver 13 for SQL Server};SERVER=' + cred['host'] + '; PORT=' + str(cred['port']) +
+                '; DATABASE=' + '; UID=' + cred['user'] + '; PWD=' + cred['password'] + '; Trusted_Connection = Yes'
+            , autocommit=True)
 
-        lg.info('connect')
-        return True
+            self.host = cred['host']
+            self.dbUser = cred['user']
+            self.dbPassword = cred['password']
+            self.cursor = self.conn.cursor()
+            lg.info('connect:Connection authenticated for user:' + cred['user'])
+            return True
+
+        except Exception as err:
+            self.dbName = None
+            lg.error('connect:' + str(err))
+            return False
 
     def execute(self, sql, args=None):
         sql = sql.replace('%s', '?')
@@ -152,17 +148,14 @@ class Interface(Instance):
             return False
 
     def drop_database(self, database_name):
+        sql = 'DROP DATABASE ' + database_name + ';'
         try:
-            if self.database_exist(database_name):
-                if getsize(database_name):
-                    remove(database_name)
-                lg.info('drop_database:')
-                return True
-            else:
-                raise ValueError('Database not found.', database_name)
+            self.cursor.execute(sql)
+            lg.info('drop_database:' + sql)
+            return True
 
         except Exception as err:
-            lg.error('drop_database:' + str(err))
+            lg.error('drop_database:' + str(err) + ':' + sql)
             return False
 
     def create_table(self, table_name, sql):
@@ -177,31 +170,19 @@ class Interface(Instance):
             return False
 
     def create_database(self, database_name):
+        sql = 'CREATE DATABASE %s' % database_name
+
         try:
-            if not isfile(database_name):
-                open(database_name, 'w').close()
-                lg.info('create_database:Database:' + self.dbName)
-                return True
-
-            elif not getsize(database_name):
-                lg.info('create_database:Database:' + self.dbName)
-                return True
-
-            else:
-                with open(database_name, 'r') as fd:
-                    header = fd.read(100)
-
-                    if header[:15] == 'SQLite format 3':
-                        raise ValueError('Database file already exists.', database_name)
-                    else:
-                        raise ValueError('File is not a SQLite3 database file.', database_name)
+            self.cursor.execute(sql)
+            lg.info('create_database:' + sql)
+            return True
 
         except Exception as err:
-            lg.error('create_database:' + str(err))
+            lg.error('create_database:' + str(err) + ':' + sql)
             return False
 
     def row_exist(self, table_name, id):
-        sql = 'SELECT id FROM ' + table_name + ' WHERE id=?;'
+        sql = 'SELECT id FROM ' + table_name + ' WHERE id=%s;'
         if self.execute(sql, (id,)):
             if self.fetchone():
                 return True
@@ -209,9 +190,10 @@ class Interface(Instance):
                 return False
 
     def table_exist(self, table_name):
-        sql = 'SELECT 1 FROM sqlite_master WHERE type="table" AND name="' + table_name + '";'
+        sql = "SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = '%s'" % table_name
         try:
-            if self.cursor.execute(sql).fetchone():
+            self.cursor.execute(sql)
+            if self.cursor.fetchone():
                 return True
             else:
                 return False
@@ -221,22 +203,18 @@ class Interface(Instance):
             return False
 
     def database_exist(self, database_name):
-        if not isfile(database_name):
+        sql = "SELECT 1 FROM sys.databases WHERE name = '" + database_name + "'"
+
+        try:
+            self.cursor.execute(sql)
+            if self.cursor.fetchone():
+                return True
+            else:
+                return False
+
+        except Exception as err:
+            lg.error('database_exist:' + str(err))
             return False
-
-        elif not getsize(database_name):
-            return True
-
-        elif getsize(database_name) < 100 and getsize(database_name):
-            return False
-        else:
-            with open(database_name, 'rb') as fd:
-                header = fd.read(100)
-
-                if header[:15] == b'SQLite format 3':
-                    return True
-
-        return False
 
     def insert_row(self, table_name, row):
         parts = ''
@@ -294,3 +272,4 @@ class Interface(Instance):
         except Exception as err:
             lg.error('delete_row:'+str(err) + ':' + sql)
             return False
+

@@ -82,7 +82,8 @@ class Credentials():
 
     def __credentials(self, crdntls):
         fields = crdntls.split(':', 2)
-        self.credentials["Driver"] = fields[0]
+
+        self.credentials["dialect"] = fields[0]
 
         if (fields[1][2:])[:1] == '/':
             try:
@@ -116,14 +117,22 @@ class Credentials():
 def new_engine(crdntls):
     crdntls = Credentials().set_credentials(crdntls).get_credentials()
 
-    if crdntls["Driver"] == 'mysql':
+    if crdntls["dialect"] == 'mysql':
         from dbslave import Maria
         return Maria.Interface(crdntls)
 
-    elif crdntls["Driver"] == 'sqlite':
+    elif crdntls["dialect"] == 'sqlite':
         from dbslave import SQLite3
         return SQLite3.Interface(crdntls)
 
-    elif crdntls["Driver"] == 'postgres':
+    elif crdntls["dialect"] == 'postgres':
         from dbslave import Postgres
         return Postgres.Interface(crdntls)
+
+    elif crdntls["dialect"] == 'mssql':
+        from dbslave import MSSQL
+        return MSSQL.Interface(crdntls)
+
+    elif crdntls["dialect"] == 'mssql2':
+        from dbslave import MSSQL2
+        return MSSQL2.Interface(crdntls)

@@ -24,7 +24,7 @@ class Interface(Instance):
         self.class_name = self.__class__.__name__
 
         if not log_name:
-            logName = self.class_name + '.log'
+            log_name = self.class_name + '.log'
 
         lg.basicConfig(filename=log_name, format='%(levelname)s:%(name)s:%(asctime)s:%(message)s',
             datefmt='%Y/%m/%d %I:%M:%S', level=lg.DEBUG)
@@ -32,8 +32,10 @@ class Interface(Instance):
 
     def use(self, database_name):
         cred = self.credentials
+        sql = 'USE ' + database_name
+
         try:
-            self.connect(database_name)
+            self.cursor.execute(sql)
             lg.info(self.class_name + ':use:Using database:' + database_name + ':IMPLICIT SQL')
             return True
 
@@ -46,7 +48,7 @@ class Interface(Instance):
             t = time.strftime('%Y-%m-%d_%H:%M:%S')
             os.popen('mysqldump -u %s -p%s -h %s -e --opt -c %s | gzip -c > %s.gz' % (
                 self.dbUser, self.dbPassword, self.host, database_name, database_name + '_' + t))
-            lg.info('dump:Successful:' + database_name + '_' + t + '.gz')
+            lg.info('dump:' + database_name + '_' + t + '.gz')
             return True
 
         except Exception as err:
@@ -69,7 +71,7 @@ class Interface(Instance):
     def commit(self):
         try:
             self.conn.commit()
-            lg.info('commit:Successful')
+            lg.info('commit')
             return True
 
         except Exception as err:
@@ -87,12 +89,12 @@ class Interface(Instance):
         try:
             self.conn = pymysql.connect(host=cred['host'], port=cred['port'], user=cred['user'],
                 passwd=cred['password'], database=database_name, charset=cred['charset'])
-            lg.info('connect:Connection authenticated for user:' + cred['user'])
 
             self.host = cred['host']
             self.dbUser = cred['user']
             self.dbPassword = cred['password']
             self.cursor = self.conn.cursor()
+            lg.info('connect:Connection authenticated for user:' + cred['user'])
             return True
 
         except Exception as err:
@@ -107,7 +109,7 @@ class Interface(Instance):
             else:
                 self.cursor.execute(sql, args)
 
-            lg.info('execute:Successful:' + sql)
+            lg.info('execute:' + sql)
             return True
 
         except Exception as err:
@@ -117,7 +119,7 @@ class Interface(Instance):
     def fetchone(self):
         try:
             row = self.cursor.fetchone()
-            lg.info('fetchone:Successful')
+            lg.info('fetchone')
             return row
 
         except Exception as err:
@@ -127,7 +129,7 @@ class Interface(Instance):
     def fetchall(self):
         try:
             rows = self.cursor.fetchall()
-            lg.info('fetchall:Successful')
+            lg.info('fetchall')
             return rows
 
         except Exception as err:
@@ -138,7 +140,7 @@ class Interface(Instance):
         sql = 'DROP TABLE ' + table_name + ';'
         try:
             self.cursor.execute(sql)
-            lg.info('drop_table:Successful:' + sql)
+            lg.info('drop_table:' + sql)
             return True
 
         except Exception as err:
@@ -148,8 +150,9 @@ class Interface(Instance):
     def drop_database(self, database_name):
         sql = 'DROP DATABASE ' + database_name + ';'
         try:
+            self.use('master')
             self.cursor.execute(sql)
-            lg.info('drop_database:Successful:' + sql)
+            lg.info('drop_database:' + sql)
             return True
 
         except Exception as err:
@@ -159,8 +162,9 @@ class Interface(Instance):
     def create_table(self, table_name, sql):
         sql = 'CREATE TABLE ' + table_name + ' ( ' + sql + ' );'
         try:
+
             self.cursor.execute(sql)
-            lg.info('create_table:Successful:' + sql)
+            lg.info('create_table:' + sql)
             return True
 
         except Exception as err:
@@ -171,7 +175,7 @@ class Interface(Instance):
         sql = 'CREATE DATABASE %s;' % database_name
         try:
             self.cursor.execute(sql)
-            lg.info('create_database:Successful:' + sql)
+            lg.info('create_database:' + sql)
             return True
 
         except Exception as err:
@@ -232,7 +236,7 @@ class Interface(Instance):
 
         try:
             self.cursor.execute(sql, tuple(data))
-            lg.info('insert_row:Successful:' + sql)
+            lg.info('insert_row:' + sql)
             return True
 
         except Exception as err:
@@ -253,7 +257,7 @@ class Interface(Instance):
 
         try:
             self.cursor.execute(sql, tuple(data))
-            lg.info('update_row:Successful:' + sql)
+            lg.info('update_row:' + sql)
             return True
 
         except Exception as err:
@@ -264,7 +268,7 @@ class Interface(Instance):
         sql = 'DELETE FROM ' + table_name + ' WHERE id = %s;'
         try:
             self.cursor.execute(sql, (id,))
-            lg.info('delete_row:Successful:' + sql)
+            lg.info('delete_row:' + sql)
             return True
 
         except Exception as err:
